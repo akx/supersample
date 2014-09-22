@@ -5,18 +5,47 @@
 	<title>Temporal supersampling</title>
 </head>
 <body>
-Samples: <input type="range" id="samples" min="1" max="16" value="1">
-Motion speed: <input type="range" id="speed" min="-1000" max="1000" value="100"><br>
-<canvas width="512" height="512" id="canvas"></canvas>
+<table>
+	<tr>
+		<td>
+			<canvas width="512" height="512" id="canvas"></canvas>
+		</td>
+		<td valign="top">
+			Samples:<br><input type="range" id="samples" min="1" max="16" value="1"><br>
+			Motion speed:<br><input type="range" id="speed" min="-1000" max="1000" value="100"><br>
+			Resolution:<br><select id="resolution" size="3">
+				<option value="128">128x128</option>
+				<option value="256" selected>256x256</option>
+				<option value="512">512x512</option>
+			</select><br>
+			<label><input type="checkbox" id="correct"><small>(Try to)</small> correct motion based on performance</label><br>
+			Frame render time: <span id="render-time"></span>ms
+		</td>
+	</tr>
+</table>
+
+
 <script>
 	var outputCanvas = document.getElementById("canvas");
 	var scratchCanvas = document.createElement("canvas");
 	var time = 0;
 	var lastTime = 0;
+	var desiredFps = 30;
+	var lastRenderTime = 0;
+	var desiredRenderTime = 1000 / desiredFps;
 	var palette = ["#4ECDC4", "#FF6B6B", "#C7F464"];  // http://www.colourlovers.com/palette/1930/cheer_up_emo_kid
+	var speedEl = document.getElementById("speed");
+	var samplesEl = document.getElementById("samples");
+	var resEl = document.getElementById("resolution");
+	var correctEl = document.getElementById("correct");
 
 	function lerp(a, b, alpha) {
 		return b * alpha + a * (1 - alpha);
+	}
+
+	function wallclock() {
+		if(window.performance && window.performance.now) return +window.performance.now();
+		return +new Date();
 	}
 
 	/**
@@ -53,14 +82,18 @@ Motion speed: <input type="range" id="speed" min="-1000" max="1000" value="100">
 	}
 
 	function tick() {
-		var speed = (document.getElementById("speed").valueAsNumber) / 1000.0;
-		var samples = 0 | document.getElementById("samples").valueAsNumber;
-		var buffer = new Float32Array(canvas.width * canvas.height * 4);
+		var startTime = wallclock();
+		var speed = (speedEl.valueAsNumber) / 1000.0;
+		var samples = 0 | samplesEl.valueAsNumber;
+		var resolution = 0 | resEl.value;
+
+		outputCanvas.width = outputCanvas.height = resolution;
+		var buffer = new Float32Array(outputCanvas.width * outputCanvas.height * 4);
 		var sample, offset, data;
-		time += speed;
+		time += speed * (correctEl.checked ? (lastRenderTime / desiredRenderTime) : 1);
 		for(sample = 0; sample < samples; sample++) {
 			var ssTime = lerp(lastTime, time, sample / samples);
-			data = render(512, 512, ssTime);
+			data = render(outputCanvas.width, outputCanvas.height, ssTime);
 			for(offset = 0; offset < data.data.length; offset++) { // Accumulate
 				buffer[offset] += data.data[offset];
 			}
@@ -69,10 +102,14 @@ Motion speed: <input type="range" id="speed" min="-1000" max="1000" value="100">
 			data.data[offset] = Math.round(buffer[offset] / samples);
 		}
 		outputCanvas.getContext("2d").putImageData(data, 0, 0);
+		var endTime = wallclock();
 		lastTime = time;
-		requestAnimationFrame(tick);
+		lastRenderTime = endTime - startTime;
 	}
-	tick();
+	setInterval(tick, 1000 / desiredFps);
+	setInterval(function() {
+		document.getElementById("render-time").innerHTML = lastRenderTime.toFixed(2);
+	}, 250);
 
 </script>
 

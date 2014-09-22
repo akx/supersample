@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+	<meta charset="UTF-8">
+	<title>Temporal supersampling</title>
+</head>
+<body>
+Samples: <input type="range" id="samples" min="1" max="16" value="1">
+Motion speed: <input type="range" id="speed" min="-1000" max="1000" value="100"><br>
+<canvas width="512" height="512" id="canvas"></canvas>
+<script>
+	var outputCanvas = document.getElementById("canvas");
+	var scratchCanvas = document.createElement("canvas");
+	var time = 0;
+	var lastTime = 0;
+	var palette = ["#4ECDC4", "#FF6B6B", "#C7F464"];  // http://www.colourlovers.com/palette/1930/cheer_up_emo_kid
+
+	function lerp(a, b, alpha) {
+		return b * alpha + a * (1 - alpha);
+	}
+
+	/**
+	 * Render a single frame at time `time`.
+	 * @param width frame width
+	 * @param height frame height
+	 * @param time time
+	 * @returns {ImageData}
+	 */
+	function render(width, height, time) {
+		scratchCanvas.width = width;
+		scratchCanvas.height = height;
+		var ctx = scratchCanvas.getContext("2d");
+		ctx.setTransform(1, 0, 0, 1, 0, 0);
+		ctx.fillStyle = "#556270";
+		ctx.fillRect(0, 0, width, height);
+		ctx.scale(width, height);
+		ctx.translate(0.5, 0.5);
+		var n = 9;
+		for(var i = 0; i < n; i++) {
+			var p = i / n;
+			var angle = p * Math.PI * 2 + time * 0.2;
+			var radius = 0.3 + Math.cos(p + time) * 0.03;
+			ctx.save();
+			ctx.translate(Math.cos(angle) * radius, Math.sin(angle) * radius);
+
+			ctx.fillStyle = palette[i % palette.length];
+			ctx.beginPath();
+			ctx.arc(0, 0, 0.03, 0, Math.PI * 2);
+			ctx.fill();
+			ctx.restore();
+		}
+		return ctx.getImageData(0, 0, width, height);
+	}
+
+	function tick() {
+		var speed = (document.getElementById("speed").valueAsNumber) / 1000.0;
+		var samples = 0 | document.getElementById("samples").valueAsNumber;
+		var buffer = new Float32Array(canvas.width * canvas.height * 4);
+		var sample, offset, data;
+		time += speed;
+		for(sample = 0; sample < samples; sample++) {
+			var ssTime = lerp(lastTime, time, sample / samples);
+			data = render(512, 512, ssTime);
+			for(offset = 0; offset < data.data.length; offset++) { // Accumulate
+				buffer[offset] += data.data[offset];
+			}
+		}
+		for(offset = 0; offset < data.data.length; offset++) { // Divide and write to pixel data
+			data.data[offset] = Math.round(buffer[offset] / samples);
+		}
+		outputCanvas.getContext("2d").putImageData(data, 0, 0);
+		lastTime = time;
+		requestAnimationFrame(tick);
+	}
+	tick();
+
+</script>
+
+</body>
+</html>
